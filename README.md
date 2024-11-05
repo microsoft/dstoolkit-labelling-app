@@ -1,14 +1,72 @@
-# Project
+# Labelling App
 
-> This repo has been populated by an initial template to help get you started. Please
-> make sure to update the content to build a great experience for community-building.
+This repository contains a web application developed with Streamlit for quick collection of feedback from Subject Matter Experts (SMEs) on machine learning-generated outputs. The application offers the following features:
 
-As the maintainer of this project, please make a few updates:
+- Data management via Azure Blob Storage
+- Options to save progress and automatically reload results between different sessions
+- Ability to record high-level feedback per sample, as well as detailed analysis of specific parts
+- Ease of customization for specific use cases
 
-- Improving this README.MD file to provide a great experience
-- Updating SUPPORT.MD with content about this project's support experience
-- Understanding the security reporting process in SECURITY.MD
-- Remove this section from the README
+![Web Application](./src/assets/app_demo.png)
+
+## Setup
+
+### Environment
+
+1. Choose your preferred Python environment manager, such as Conda or venv.
+2. Install project dependencies:
+
+    ```bash
+    pip install -r ./webpage/requirements.txt
+    ```
+
+3. Navigate to the `src/` folder and set up the `$PYTHONPATH`:
+
+    ```bash
+    cd src/
+    source exports.sh
+    ```
+
+Alternatively, you can use the provided [Docker image](./Dockerfile):
+
+```bash
+docker build . -t labellingapp
+```
+
+(Optional) Install [pre-commit](https://pre-commit.com) hook to execute ruff before committing:
+
+```bash
+pre-commit install
+```
+
+### Azure Blob Connection
+
+The web app relies on Azure Blob Storage to manage the labelling data and user credentials. Azure Blob Storage connection settings are configured via environment variables. All required key/values are described in the [`.env.template`](./.env.template) file.
+
+### Upload Assets to the Blob Container
+
+- Upload data for labelling to the blob container configured in the previous section. An example of data can be found in the provided [data sample](./src/assets/data_sample.json).
+- Upload [config.yaml](/src/assets/config.yaml) to the blob container. `config.yaml` specifies [Streamlit-Authenticator](https://github.com/mkhorasani/Streamlit-Authenticator) settings for managing user sessions.
+
+### Change Settings Based on Your Data
+
+- [config.py](/src/config.py) sets the required column names for reading input data.
+- [labelling_consts.py](/src/webpage/labelling_consts.py) sets the output column names and error categories.
+- [labelling_instructions.md](/src/assets/labelling_instructions.md) provides a description of how SMEs should approach labelling.
+
+## Security
+
+- The web app itself does not implement any security checks or user access restrictions. It is recommended to restrict access to the service by placing it behind a network layer that implements user management, such as Azure App Service. More information can be found [here](https://learn.microsoft.com/en-us/entra/identity-platform/multi-service-web-app-authentication-app-service).
+
+- There is an option to register and log in within the app, open to any users. This feature enables auto-saving of the results in the Azure Blob container. The user list can also be predefined by adjusting [config.yaml](/src/assets/config.yaml). See [Streamlit-Authenticator](https://github.com/mkhorasani/Streamlit-Authenticator) for available options.
+
+- This application is not designed for managing highly confidential data. Additional security audits must be performed for such scenarios.
+
+## Deployment
+
+The web app can be packaged for deployment via the following Azure Pipeline: [.pipelines/webapp.yml](.pipelines/webapp.yml).
+
+The pipeline updates the image in the Azure Container Registry (ACR). When Azure App Service is using the container registry, the deployment will trigger a webhook that updates the app based on the new image. Instructions for setup can be found [here](https://learn.microsoft.com/en-us/azure/app-service/tutorial-custom-container?tabs=azure-cli&pivots=container-linux).
 
 ## Contributing
 
