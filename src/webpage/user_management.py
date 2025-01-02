@@ -69,7 +69,7 @@ def auth_users():
 
 - It contains at least one lowercase letter.
 - It contains at least one uppercase letter.
-= It contains at least one digit.
+- It contains at least one digit.
 - It contains at least one special character from the set @$!%*?&.
 - It has a length between 8 and 20 characters."""
                         )

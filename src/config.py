@@ -23,7 +23,7 @@ LABELLING_DATETIME_FORMAT = (
 
 # Input file columns
 EVALUATION_GT_COLUMN = (
-    "grount_truth"  # Column name for the ground truth answers in the input file
+    "ground_truth"  # Column name for the ground truth answers in the input file
 )
 QUESTION_COLUMN = "question"  # Column name for the question in the input file
 PREDICTIONS_COLUMN = (

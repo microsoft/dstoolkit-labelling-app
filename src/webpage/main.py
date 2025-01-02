@@ -63,9 +63,9 @@ def display_llm_metrics(row: pd.Series) -> None:
 def main():
     init_session_state_variables()
     auth_users()
-    # user_name = st.sidebar.text_input(
-    #     "Username:", key=USER_NAME, on_change=init_session_state_variables
-    # )
+    # You can use st.session_state["authentication_status"] to check if the user is authenticated
+    # This application allows to continue without authentication
+
     user_name = st.session_state.get(USER_NAME)
     if LABELLING_INSTRUCTIONS is not None:
         with st.expander("Instructions"):
@@ -123,6 +123,11 @@ def main():
     if results_df is None:
         st.error("Error loading results.")
         return
+
+    ind = data.index[ind]
+    if ind not in results_df.index:
+        ind = str(ind)  # could happen due to serialization
+
     if results_df.loc[ind, START_TIME_MS] is None:
         results_df.loc[ind, START_TIME_MS] = datetime.now().strftime(
             LABELLING_DATETIME_FORMAT
@@ -331,7 +336,7 @@ def main():
     for col in optional_cols:
         if col in results_df.columns:
             show_cols.append(col)
-    st.dataframe(results_df[show_cols])
+    st.dataframe(results_df[show_cols].reset_index(drop=True))
     save_results_to_blob(user_name)
 
 
