@@ -30,10 +30,11 @@ def read_data_from_file(file: BytesIO) -> pd.DataFrame | None:
     try:
         data = json.load(file)
         if "data" not in data:
-            df = pd.DataFrame.from_dict(data, orient="columns").reset_index(drop=True)
+            df = pd.DataFrame.from_dict(data, orient="columns")
             return df
         df = pd.DataFrame.from_dict(data["data"])
         df.columns = data["columns"]
+        df.index = data["index"]
         return df
     except Exception as e:
         logger.exception(f"Error loading data from file: {e}")
