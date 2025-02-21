@@ -29,6 +29,21 @@ def reload_results_from_file(file_name: str) -> None:
         st.error(f"Error loading data from file. {e}")
 
 
+def decode_file_name(file_name: str) -> tuple[str, str]:
+    """
+    Decodes the file name to get the date and user name.
+
+    Args:
+        file_name (str): The name of the file.
+
+    Returns:
+        tuple[str, str]: The original file name and the user name.
+    """
+    # TODO: replace with more reliable separation
+    parts = file_name.replace(LABELLING_RESULTS_FOLDER, "").split("_")
+    return parts[-2], parts[-1].replace(".json", "")
+
+
 def load_saved_results(user_name: str | None) -> bool:
     """
     Loads the saved results (if availalbe) for a given user.

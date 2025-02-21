@@ -6,6 +6,7 @@ from azure.storage.blob.aio import (
     BlobServiceClient as AsyncBlobServiceClient,
     ContainerClient as AsyncContainerClient,
 )
+from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient, ContainerClient
 import streamlit as st
 
@@ -39,13 +40,24 @@ def get_container_client(
         return None
 
     service_client = BlobServiceClient if sync else AsyncBlobServiceClient
+    account_name = blob_connection_string.split(";")[1].split("AccountName=")[1]
+    account_url = f"https://{account_name}.blob.core.windows.net"
+    credential = DefaultAzureCredential()
     try:
-        blob_service_client = service_client.from_connection_string(
-            blob_connection_string
-        )
+        blob_service_client = service_client(account_url, credential)
     except Exception as e:
-        logger.error(f"Error getting blob service client: {e}")
-        return None
+        logger.error(
+            f"Error getting blob service client via DefaultAzureCredential: {e}"
+        )
+        try:
+            blob_service_client = service_client.from_connection_string(
+                blob_connection_string
+            )
+        except Exception as e:
+            logger.error(
+                f"Error getting blob service client via connection string: {e}"
+            )
+            return None
 
     try:
         return blob_service_client.get_container_client(blob_container_name)

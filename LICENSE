@@ -36,5 +36,7 @@ This software makes use of third-party packages listed below. Each package is li
 - **azure-storage-blob** - Licensed under MIT License
 - **aiohttp** - Licensed under Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 - **streamlit_authenticator** - License information varies; check individual package details if necessary
-
+- **seaborn** - Licensed under BSD 3-Clause License
+- **scipy** - Licensed under BSD 3-Clause License
+- **plotly** - Licensed under MIT License
 Please refer to each package’s LICENSE file or official documentation for full terms.

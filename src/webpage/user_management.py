@@ -7,7 +7,7 @@ from yaml.loader import SafeLoader
 from config import USER_AUTH_CONFIG_FILE
 from utils.azure_blob_utils import download_file_from_blob, upload_to_blob
 from utils.st_utils import run_async
-from webpage.labelling_consts import USER_NAME
+from webpage.labelling_consts import _USER_ROLE_KEY, DS_ROLE_KEY, USER_NAME
 
 
 def auth_users():
@@ -17,7 +17,7 @@ def auth_users():
     Returns:
         None
     """
-
+    st.session_state[_USER_ROLE_KEY] = False  # Data analysis view is protected by roles
     with st.sidebar:
         config_file = download_file_from_blob(USER_AUTH_CONFIG_FILE)
         if config_file is None:
@@ -37,8 +37,15 @@ def auth_users():
             if st.session_state.get("name"):
                 st.write(f'Welcome *{st.session_state["name"]}*')
             authenticator.logout()
-
-            st.session_state[USER_NAME] = st.session_state.get("username")
+            user_name = st.session_state.get("username")
+            st.session_state[USER_NAME] = user_name
+            if (
+                config.get("credentials", {})
+                .get("usernames", {})
+                .get(user_name, {})
+                .get(DS_ROLE_KEY)
+            ):
+                st.session_state[_USER_ROLE_KEY] = True
 
         elif st.session_state["authentication_status"] is False:
             st.error("Username/password is incorrect")

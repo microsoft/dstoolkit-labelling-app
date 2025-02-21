@@ -1,6 +1,5 @@
 credentials:
   usernames:
-
 cookie:
   expiry_days: 30
   key: random_signature_key # Must be string
