@@ -45,6 +45,8 @@ def get_container_client(
     credential = DefaultAzureCredential()
     try:
         blob_service_client = service_client(account_url, credential)
+        # Check if the access is successful
+        blob_service_client.get_service_properties()
     except Exception as e:
         logger.error(
             f"Error getting blob service client via DefaultAzureCredential: {e}"
