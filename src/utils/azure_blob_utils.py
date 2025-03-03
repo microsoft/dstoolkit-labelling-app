@@ -139,7 +139,7 @@ async def upload_to_blob(
     file_name: str,
     entry: str,
     container_client_: AsyncContainerClient | None = None,
-    delelete_old_entries: bool = False,
+    delete_old_entries: bool = False,
 ):
     """
     Uploads the given entry to Azure Blob Storage.
@@ -148,7 +148,7 @@ async def upload_to_blob(
     - file_name (str): The name of the file/blob to upload the entry to.
     - entry (str): The entry to be uploaded.
     - container_client_ (AsyncContainerClient | None): Optional container client. If not provided, a new container client will be created.
-    - delelete_old_entries (bool): Flag indicating whether to delete old entries in the blob.
+    - delete_old_entries (bool): Flag indicating whether to delete old entries in the blob.
 
     Returns:
         None
@@ -167,19 +167,20 @@ async def upload_to_blob(
         # Upload updated content
         await container_client.upload_blob(file_name, entry, overwrite=True)
         logger.info(f"Uploaded entry to {file_name}.")
-        if delelete_old_entries:
+        if delete_old_entries:
             await delete_old_entries(
                 file_name=file_name, container_client=container_client
             )
-    except Exception:
+    except Exception as e:
         # If blob doesn't exist or there's an error, create new blob with single entry
+        logger.warning(f"Error during blob update, attempting to create new: {e}")
         await container_client.upload_blob(file_name, entry)
-        if delelete_old_entries:
+        if delete_old_entries:
             await delete_old_entries(
                 file_name=file_name, container_client=container_client
             )
     finally:
-        if container_client is not None:
+        if container_client is not None and container_client_ is None:
             await container_client.close()
 
 

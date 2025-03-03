@@ -43,7 +43,7 @@ def progress_view(results: Dict[str, Any]) -> None:
     """
     Display labelling progress visualizations for experiments.
 
-    This function shows two sections: overall per-file progress and progress where
+    Shows two sections: overall per-file progress and progress where
     files have been labelled by at least a specified number of users.
 
     Parameters:
@@ -61,7 +61,7 @@ def summary_view(results: Dict[str, Any]) -> None:
     """
     Display summary statistics for experiments.
 
-    The function dynamically determines numeric columns from the first experiment and
+    Dynamically determines numeric columns from the first experiment and
     allows selecting additional columns for processing.
 
     Parameters:
@@ -88,7 +88,7 @@ def correlation_analysis(results: Dict[str, Any]) -> None:
     """
     Perform and display correlation analysis on numeric metrics.
 
-    This function aggregates data across experiments and allows selection of metrics
+    Aggregates data across experiments and allows selection of metrics
     (excluding any score columns) for correlation heatmap visualization.
 
     Parameters:
@@ -122,7 +122,7 @@ def worst_scored_examples(results: Dict[str, Any]) -> None:
     """
     Display the top-10 worst scored examples across experiments.
 
-    This function aggregates labelling data, computes a mean score (across available score columns)
+    Aggregates labelling data, computes a mean score (across available score columns)
     for each row, and then presents the 10 rows with the lowest scores.
 
     Parameters:

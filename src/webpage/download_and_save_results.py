@@ -1,9 +1,8 @@
 from config import LABELLING_DATETIME_FORMAT, LABELLING_RESULTS_FOLDER
 from datetime import datetime
 from utils.logger import logger
-from webpage.labelling_consts import USER_NAME
+from webpage.labelling_consts import FILE_NAME_SEPARATOR, USER_NAME
 from webpage.manage_user_session import get_current_results, get_results_key
-
 
 import streamlit as st
 
@@ -16,7 +15,7 @@ def create_file_name(user_name: str | None) -> str:
     Creates a file name for the labelling results.
 
     Args:
-        username (str | None): The username of the user. Can be None if not available.
+        user_name (str | None): The username of the user. Can be None if not available.
 
     Returns:
         str: The generated file name in the format: {timestamp}_{file_name}_{username}.json
@@ -24,7 +23,7 @@ def create_file_name(user_name: str | None) -> str:
     timestamp = datetime.now().strftime(LABELLING_DATETIME_FORMAT)
     if "file_name" not in st.session_state:
         st.session_state["file_name"] = "labelling_results"
-    file_name = f"{timestamp}_{st.session_state.get('file_name')}_{user_name}.json"
+    file_name = f"{timestamp}{FILE_NAME_SEPARATOR}{st.session_state.get('file_name')}{FILE_NAME_SEPARATOR}{user_name}.json"
     return file_name
 
 
@@ -60,7 +59,7 @@ def save_results_to_blob(user_name: str | None) -> None:
     Saves the current results to a blob storage container.
 
     Args:
-        username (str | None): The username to associate with the saved results.
+        user_name (str | None): The username to associate with the saved results.
 
     Returns:
         None
@@ -80,13 +79,13 @@ def save_results_to_blob(user_name: str | None) -> None:
         st.warning("No results to save.")
         return
     try:
-        container_clinet = get_container_client()
+        container_client = get_container_client()
         run_async(
             upload_to_blob(
                 file_name,
                 results,
-                container_clinet,  # type: ignore
-                delelete_old_entries=True,
+                container_client,  # type: ignore
+                delete_old_entries=True,
             )
         )
     except Exception as e:

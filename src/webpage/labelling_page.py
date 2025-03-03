@@ -1,4 +1,8 @@
 from datetime import datetime
+from typing import Dict, Any
+
+import pandas as pd
+import streamlit as st
 
 from config import (
     CONTEXT_COLUMN,
@@ -7,6 +11,7 @@ from config import (
     PREDICTIONS_COLUMN,
     QUESTION_COLUMN,
 )
+from utils.st_utils import LABELLING_INSTRUCTIONS, LOGO_ICON
 from webpage.download_and_save_results import download_results, save_results_to_blob
 from webpage.initial_st_setup import initial_setup
 from webpage.labelling_consts import (
@@ -15,14 +20,11 @@ from webpage.labelling_consts import (
     END_TIME_MS,
     ERROR,
     ERROR_ANALYSIS,
-    ERROR_CATEGORIES_LIST,
-    ERROR_CATEGORIES_MARKDOWN,
     ERROR_DESCRIPTION,
     ERROR_SNIPPET,
     FEEDBACK,
     FILE_HASH,
     LABEL_QUALITY,
-    QUALITY_LABELS,
     QUESTION_HASH,
     SEED,
     SELECTED_ROW_ID,
@@ -39,27 +41,26 @@ from webpage.manage_user_session import (
     init_session_state_variables,
 )
 from webpage.reload_saved_results import load_saved_results
-from webpage.save_user_labels import save_error, save_new_gt, save_user_feedback
-import streamlit as st
-from utils.st_utils import LABELLING_INSTRUCTIONS, LOGO_ICON
-import pandas as pd
+from webpage.form_handling.labelling_handlers import (
+    QualityFeedbackHandler,
+    ErrorFeedbackHandler,
+    GroundTruthHandler,
+)
 
 
 def display_llm_metrics(row: pd.Series) -> None:
     """
     Display the metrics for the given row.
-    Parameters:
-    - row: pd.Series
-        The row containing the metrics data.
-    Returns:
-    None
-    """
 
+    Parameters:
+        row: The row containing the metrics data.
+    """
     # Placeholder: add the code to display the metrics here
     st.write("Metrics will be displayed here")
 
 
 def headers_setup() -> None:
+    """Set up the application header with logo and title."""
     if LOGO_ICON is not None:
         st.image(LOGO_ICON, width=200, use_column_width=False, output_format="PNG")
     st.title(APP_TITLE)
@@ -69,15 +70,247 @@ def headers_setup() -> None:
         st.write("___")
 
 
-def main():
+def setup_sidebar_navigation(data_length: int) -> None:
+    """
+    Set up the sidebar navigation controls and progress display.
+
+    Parameters:
+        data_length: The total number of items in the dataset.
+    """
+    with st.sidebar:
+        st.markdown("### Progress")
+        st.number_input(
+            "Sample number:",
+            0,
+            data_length - 1,
+            value=st.session_state.get(SELECTED_ROW_ID)
+            if 0 <= st.session_state.get(SELECTED_ROW_ID, 0) < data_length
+            else 0,
+            on_change=lambda: st.session_state.update(
+                {SELECTED_ROW_ID: st.session_state["sample_number"]}
+            ),
+            key="sample_number",
+        )
+
+        results_df = st.session_state.get(get_results_key())
+        completed_num = 0
+        if results_df is not None and LABEL_QUALITY in results_df.columns:
+            completed_num = results_df[LABEL_QUALITY].count()
+
+        completion_percentage = (
+            (100 * completed_num / data_length) if data_length > 0 else 0
+        )
+        st.write(
+            f"Completed: {completion_percentage:.0f}% ({completed_num}/{data_length})"
+        )
+
+    # Add navigation buttons
+    prev_button, next_button = st.sidebar.columns(2)
+    prev_button.button(
+        "⬅️ Prev sample",
+        on_click=lambda: st.session_state.update(
+            {SELECTED_ROW_ID: st.session_state[SELECTED_ROW_ID] - 1}
+        ),
+    )
+    next_button.button(
+        "Next sample ➡️",
+        on_click=lambda: st.session_state.update(
+            {SELECTED_ROW_ID: st.session_state[SELECTED_ROW_ID] + 1}
+        ),
+    )
+
+
+def display_question_and_answers(
+    row: pd.Series, question_hash: int, show_context_data: bool, show_llm_metrics: bool
+) -> None:
+    """
+    Display the question, model answer, and ground truth with labelling forms.
+
+    Parameters:
+        row: The row data to display
+        question_hash: Hash of the current question
+        show_context_data: Whether to show context data
+        show_llm_metrics: Whether to show LLM metrics
+    """
+    question = row[QUESTION_COLUMN]
+    model_answer = row[PREDICTIONS_COLUMN]
+    gt_answer = (
+        row.get(EVALUATION_GT_COLUMN)
+        if EVALUATION_GT_COLUMN in row and not pd.isna(row[EVALUATION_GT_COLUMN])
+        else None
+    )
+
+    st.markdown(f"### Question \n{question}")
+
+    if pd.isna(gt_answer):
+        st.warning("No ground truth provided.")
+    if pd.isna(model_answer):
+        st.warning("No model answer provided.")
+        return
+
+    col1, col2 = st.columns(2)
+
+    # Display model answer and labelling forms
+    with col1:
+        st.markdown("### Model Answer")
+
+        if show_context_data:
+            if CONTEXT_COLUMN not in row.index or pd.isna(row[CONTEXT_COLUMN]):
+                st.warning("No context data available.")
+            else:
+                with st.expander("Context data"):
+                    st.write(row[CONTEXT_COLUMN])
+
+        st.markdown(model_answer)
+        st.write("### Labelling")
+
+        # Display error feedback form
+        error_handler = ErrorFeedbackHandler(question_hash)
+        with st.expander("Add feedback on a part of the answer"):
+            error_handler.render_form(
+                error_handler.render_error_feedback_form,
+                button_name="Submit error category",
+            )
+
+        # Display previous feedback if available
+        results_df = st.session_state[get_results_key()]
+        ind = row.name
+        if ind not in results_df.index:
+            ind = str(ind)  # could happen due to serialization
+
+        if results_df.loc[ind].get(ERROR_ANALYSIS) is not None:
+            with st.expander("Previous Feedback"):
+                for feedback_item in results_df.loc[ind].get(ERROR_ANALYSIS):
+                    display_feedback_item(feedback_item)
+
+        # Quality feedback form
+        quality_handler = QualityFeedbackHandler(question_hash)
+        quality_handler.render_form(
+            quality_handler.render_quality_feedback_form, button_name="Submit feedback"
+        )
+
+    # Display ground truth or gt form
+    with col2:
+        st.markdown("### Ground Truth")
+        if gt_answer is not None:
+            st.write(gt_answer)
+        else:
+            gt_handler = GroundTruthHandler(question_hash)
+            st.write(
+                "This is the question without a ground truth. Please, assess the relevance of the question and provide a corrected question and ground truth answer if possible."
+            )
+            gt_handler.render_form(
+                gt_handler.render_ground_truth_form, button_name="Submit ground truth"
+            )
+
+        if show_llm_metrics:
+            st.write("### LLM Metrics")
+            display_llm_metrics(row)
+
+
+def display_feedback_item(feedback_item: Dict[str, Any]) -> None:
+    """
+    Display a single feedback item from previous error analysis.
+
+    Parameters:
+        feedback_item: The feedback item to display
+    """
+    if not isinstance(feedback_item, dict):
+        st.markdown(f"**Error**: {feedback_item}")
+        return
+
+    if feedback_item.get(QUESTION_HASH) is not None:
+        st.markdown("Part of the answer: ")
+        st.code(feedback_item[ERROR_SNIPPET])
+        st.markdown(f"**Error**: {feedback_item[ERROR]}")
+        st.markdown(f"**Description**: {feedback_item[ERROR_DESCRIPTION]}")
+
+
+def display_results_table() -> None:
+    """Display the results table with all labelled data."""
+    st.markdown("# Results")
+    results_df = st.session_state[get_results_key()].copy()
+
+    show_cols = [
+        QUESTION_COLUMN,
+        LABEL_QUALITY,
+        FEEDBACK,
+        ERROR_ANALYSIS,
+        ANSWER_IS_BETTER,
+        START_TIME_MS,
+        END_TIME_MS,
+    ]
+
+    optional_cols = [SYN_QA_RELEVANCE, SYN_CORRECTED_QUESTION, SYN_GT_ANSWER]
+
+    # Initialize columns if they don't exist
+    for col in show_cols:
+        if col not in results_df.columns:
+            results_df[col] = None
+
+    # Add optional columns if they exist
+    for col in optional_cols:
+        if col in results_df.columns:
+            show_cols.append(col)
+
+    st.dataframe(results_df[show_cols].reset_index(drop=True))
+
+
+def handle_sample_selection(data: pd.DataFrame) -> int:
+    """
+    Handle selected row index validation and update start time if needed.
+
+    Parameters:
+        data: The dataset to work with
+
+    Returns:
+        The validated index of the current sample
+    """
+    # Make sure the selected row is within bounds
+    if SELECTED_ROW_ID not in st.session_state:
+        st.session_state[SELECTED_ROW_ID] = 0
+
+    ind = st.session_state[SELECTED_ROW_ID]
+
+    if ind >= len(data):
+        st.warning("No more samples to label.")
+        ind = len(data) - 1
+        st.session_state[SELECTED_ROW_ID] = ind
+    elif ind < 0:
+        st.warning("Invalid sample index. Setting to 0.")
+        st.session_state[SELECTED_ROW_ID] = 0
+        ind = 0
+
+    # Get the actual row index from the DataFrame
+    row_index = data.index[ind]
+
+    # Set the start time if not already set for the current sample
+    results_df = st.session_state.get(get_results_key())
+    if results_df is not None:
+        if row_index not in results_df.index:
+            row_index = str(row_index)  # could happen due to serialization
+
+        if results_df.loc[row_index, START_TIME_MS] is None:
+            results_df.loc[row_index, START_TIME_MS] = datetime.now().strftime(
+                LABELLING_DATETIME_FORMAT
+            )
+
+    return ind
+
+
+def main() -> None:
+    """Main function to run the labelling application."""
     headers_setup()
     init_session_state_variables()
 
     user_name = st.session_state.get(USER_NAME)
+
+    # Display instructions if available
     if LABELLING_INSTRUCTIONS is not None:
         with st.expander("Instructions"):
             st.write(LABELLING_INSTRUCTIONS)
 
+    # Get labelling data
     df = get_labelling_data()
     if df is None:
         st.warning("Please upload a JSON file to start labelling.")
@@ -107,243 +340,44 @@ def main():
                 st.session_state[loading_key] = False
             return
 
-    # Optional settings to display additional information
+    # Optional settings for additional information
     show_llm_metrics = st.sidebar.checkbox("Show LLM Metrics", False)
     show_context_data = st.sidebar.checkbox("Show context data", False)
 
-    # Make sure the selected row is within the bounds
-    if SELECTED_ROW_ID not in st.session_state:
-        st.session_state[SELECTED_ROW_ID] = 0
+    # Handle sample selection and validation
+    current_index = handle_sample_selection(data)
 
-    ind = st.session_state[SELECTED_ROW_ID]
-    if ind >= len(data):
-        st.warning("No more samples to label.")
-        ind = len(data) - 1
-        st.session_state[SELECTED_ROW_ID] = ind
-    elif ind < 0:
-        st.warning("Invalid sample index. Setting to 0.")
-        st.session_state[SELECTED_ROW_ID] = 0
-        ind = 0
-
-    # Set the start time if not already set for the current sample
+    # Check if results are available
     results_df = st.session_state.get(get_results_key())
     if results_df is None:
         st.error("Error loading results.")
         return
 
-    ind = data.index[ind]
-    if ind not in results_df.index:
-        ind = str(ind)  # could happen due to serialization
+    # Set up navigation in sidebar
+    setup_sidebar_navigation(len(data))
 
-    if results_df.loc[ind, START_TIME_MS] is None:
-        results_df.loc[ind, START_TIME_MS] = datetime.now().strftime(
-            LABELLING_DATETIME_FORMAT
-        )
-
-    # Show the progress and navigation buttons
-    with st.sidebar:
-        st.markdown("### Progress")
-        n = len(data)
-        st.number_input(
-            "Sample number:",
-            0,
-            n - 1,
-            value=st.session_state.get(SELECTED_ROW_ID)
-            if 0 <= st.session_state.get(SELECTED_ROW_ID, 0) < n
-            else 0,
-            on_change=lambda: st.session_state.update(
-                {SELECTED_ROW_ID: st.session_state["sample_number"]}
-            ),
-            key="sample_number",
-        )
-
-        completed_num = 0
-        if LABEL_QUALITY in results_df.columns:
-            completed_num = results_df[LABEL_QUALITY].count()
-        st.write(f"Completed: {(100 * completed_num / n):.0f}% ({completed_num}/{n})")
-
-    prev_button, next_button = st.sidebar.columns(2)
-    prev_button.button(
-        "⬅️ Prev sample",
-        on_click=lambda: st.session_state.update(
-            {SELECTED_ROW_ID: st.session_state[SELECTED_ROW_ID] - 1}
-        ),
-    )
-    next_button.button(
-        "Next sample ➡️",
-        on_click=lambda: st.session_state.update(
-            {SELECTED_ROW_ID: st.session_state[SELECTED_ROW_ID] + 1}
-        ),
-    )
-    # Add a button to download the results
+    # Add download button
     download_results()
 
-    row = data.iloc[st.session_state[SELECTED_ROW_ID]]
+    # Get the current row data
+    current_row = data.iloc[current_index]
 
-    # Display the question and the model answer
-    question = row[QUESTION_COLUMN]
-    if EVALUATION_GT_COLUMN in row and not pd.isna(row[EVALUATION_GT_COLUMN]):
-        gt_answer = row[EVALUATION_GT_COLUMN]
-    else:
-        gt_answer = None
-    model_answer = row[PREDICTIONS_COLUMN]
-
-    st.markdown(f"### Question \n{question}")
-    if pd.isna(gt_answer):
-        st.warning("No ground truth provided.")
-    if pd.isna(model_answer):
-        st.warning("No model answer provided.")
-
+    # Generate a hash for the current question
     question_hash = hash(
-        question + str(st.session_state[SELECTED_ROW_ID]) + get_results_key()
+        current_row[QUESTION_COLUMN]
+        + str(st.session_state[SELECTED_ROW_ID])
+        + get_results_key()
     )
-    if not pd.isna(model_answer):
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("### Model Answer")
 
-            if show_context_data:
-                if CONTEXT_COLUMN not in df.columns:
-                    st.warning("No context data available.")
-                else:
-                    with st.expander("Context data"):
-                        st.write(row[CONTEXT_COLUMN])
-            st.markdown(model_answer)
+    # Display question, answers and labelling forms
+    display_question_and_answers(
+        current_row, question_hash, show_context_data, show_llm_metrics
+    )
 
-            st.write("### Labelling")
+    # Display results table
+    display_results_table()
 
-            with st.expander("Add feedback on a part of the answer"):
-                with st.form(key=f"error_form_{question_hash}", clear_on_submit=True):
-                    st.text_area(
-                        "Part of the answer",
-                        key=f"error_snippet_{question_hash}",
-                        help="Enter the part of the answer that you want to provide feedback on.",
-                    )
-                    st.multiselect(
-                        "Error Category",
-                        ERROR_CATEGORIES_LIST,
-                        key=f"error_{question_hash}",
-                        help=ERROR_CATEGORIES_MARKDOWN,
-                    )
-                    st.text_area(
-                        "(Optional) Error Description",
-                        key=f"error_description_{question_hash}",
-                    )
-
-                    st.form_submit_button(
-                        "Submit error category",
-                        on_click=save_error,
-                        args=(question_hash,),
-                    )
-            if results_df.loc[ind].get(ERROR_ANALYSIS) is not None:
-                with st.expander("Previous Feedback"):
-                    for x in results_df.loc[ind].get(ERROR_ANALYSIS):
-                        if not isinstance(x, dict):
-                            st.markdown(f"**Error**: {x}")
-                            continue
-                        if x.get(QUESTION_HASH) is None:
-                            st.markdown("Part of the answer: ")
-                            st.code(x[ERROR_SNIPPET])
-                            st.markdown(f"**Error**: {x[ERROR]}")
-                            st.markdown(f"**Description**: {x[ERROR_DESCRIPTION]}")
-
-            with st.form(key=f"label_form_{question_hash}"):
-                st.write("General answer quality:")
-                default_quality = results_df.loc[ind].get(LABEL_QUALITY)
-                if pd.isna(default_quality):
-                    default_quality = None
-                st.select_slider(
-                    "",
-                    list(QUALITY_LABELS.values()),
-                    key=f"quality_{question_hash}",
-                    value=default_quality,
-                )
-                default_feedback = results_df.loc[ind].get(FEEDBACK)
-                if pd.isna(default_feedback):
-                    default_feedback = None
-                st.text_area(
-                    "Feedback (Optional)",
-                    key=f"feedback_{question_hash}",
-                    value=default_feedback,
-                )
-                default_answer_is_better = results_df.loc[ind].get(ANSWER_IS_BETTER)
-                if pd.isna(default_answer_is_better):
-                    default_answer_is_better = None
-                st.checkbox(
-                    "Model answer is better than provided Ground Truth",
-                    key=f"answer_is_better_{question_hash}",
-                    value=default_answer_is_better,  # type: ignore
-                )
-
-                st.form_submit_button(
-                    "Submit feedback",
-                    on_click=save_user_feedback,
-                    args=(question_hash,),
-                )
-
-        with col2:
-            st.markdown("### Ground Truth")
-            if gt_answer is not None:
-                st.write(gt_answer)
-            else:
-                # Adding additional labels for data without ground truth
-                st.write(
-                    "This is the question without a ground truth. Please, asseses the relevance of the question and provide a corrected question and ground truth answer if possible."
-                )
-                with st.form(key=f"gt_form_{question_hash}"):
-                    relevance = results_df.loc[ind].get(SYN_QA_RELEVANCE, True)
-                    st.checkbox(
-                        "The question is not relevant",
-                        key=f"syn_gt_qa_irrelevant_{question_hash}",
-                        value=False if relevance else True,
-                    )
-
-                    question = results_df.loc[ind].get(SYN_CORRECTED_QUESTION)
-                    if pd.isna(question):
-                        question = row[QUESTION_COLUMN]
-                    st.text_area(
-                        "Rewrite the question (Optional)",
-                        key=f"syn_corrected_question_{question_hash}",
-                        value=question,
-                    )
-                    gt_code = results_df.loc[ind].get(SYN_GT_ANSWER)
-                    if pd.isna(gt_code):
-                        gt_code = model_answer
-                    st.text_area(
-                        "Provide Ground Truth (Optional)",
-                        key=f"syn_gt_{question_hash}",
-                        value=gt_code,
-                    )
-
-                    st.form_submit_button(
-                        "Submit",
-                        on_click=save_new_gt,
-                        args=(question_hash,),
-                    )
-
-            if show_llm_metrics:
-                st.write("### LLM Metrics")
-                display_llm_metrics(row)
-
-    st.markdown("# Results")
-    results_df = st.session_state[get_results_key()].copy()
-    show_cols = [
-        QUESTION_COLUMN,
-        LABEL_QUALITY,
-        FEEDBACK,
-        ERROR_ANALYSIS,
-        ANSWER_IS_BETTER,
-        START_TIME_MS,
-        END_TIME_MS,
-    ]
-    optional_cols = [SYN_QA_RELEVANCE, SYN_CORRECTED_QUESTION]
-    for col in show_cols:
-        if col not in results_df.columns:
-            results_df[col] = None
-    for col in optional_cols:
-        if col in results_df.columns:
-            show_cols.append(col)
-    st.dataframe(results_df[show_cols].reset_index(drop=True))
+    # Save results to blob storage
     save_results_to_blob(user_name)
 
 

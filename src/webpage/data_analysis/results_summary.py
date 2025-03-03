@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-
+from utils.logger import logger
 from webpage.labelling_consts import _PROCESS_RESULTS_SCORE
 
 
@@ -161,7 +161,7 @@ def plot_score_distribution(
     fig = px.histogram(
         score,
         nbins=20,
-        title="Distribution of the Scores",
+        title=f"Distribution of the Scores ({run_id})",
         labels={"value": "Quality Score"},
     )
     fig.update_layout(
@@ -177,7 +177,8 @@ def plot_correlation_heatmap(run_data: pd.DataFrame, metrics: List[str]) -> None
     """
     Generate and display a correlation heatmap of quality scores and additional metrics.
 
-    The heatmap includes formatted annotations for correlation coefficients and their corresponding p-values.
+    The heatmap includes formatted annotations for correlation coefficients and their
+    corresponding p-values.
 
     Parameters:
         run_data (pd.DataFrame): DataFrame containing the scores and metric columns.
@@ -186,67 +187,74 @@ def plot_correlation_heatmap(run_data: pd.DataFrame, metrics: List[str]) -> None
     Returns:
         None
     """
-    score_columns = [col for col in run_data.columns if "score" in col]
+    score_columns = [col for col in run_data.columns if "score" in col.lower()]
     # Merge and sort to keep a consistent order
     columns_to_plot = sorted(list(set(score_columns + metrics)))
     data_subset = run_data[columns_to_plot].copy()
 
     # Compute correlation matrix
-    corr = data_subset.corr()
+    corr_matrix = data_subset.corr()
 
     # Remove completely empty rows and columns
-    corr.dropna(axis=0, how="all", inplace=True)
-    corr.dropna(axis=1, how="all", inplace=True)
-    if corr.empty:
+    corr_matrix.dropna(axis=0, how="all", inplace=True)
+    corr_matrix.dropna(axis=1, how="all", inplace=True)
+    if corr_matrix.empty:
         st.warning("Not enough data to compute correlations.")
         return
 
     # Compute p-values for the correlations via pairwise computation
-    pvals = pd.DataFrame(np.ones(corr.shape), index=corr.index, columns=corr.columns)
-    for col1 in corr.index:
-        for col2 in corr.columns:
+    p_values = pd.DataFrame(
+        np.ones(corr_matrix.shape), index=corr_matrix.index, columns=corr_matrix.columns
+    )
+    for col1 in corr_matrix.index:
+        for col2 in corr_matrix.columns:
             x = data_subset[col1]
             y = data_subset[col2]
-            valid = x.notna() & y.notna()
-            if valid.sum() < 2:
-                pvals.loc[col1, col2] = np.nan
+            valid_mask = x.notna() & y.notna()
+            valid_count = valid_mask.sum()
+
+            if valid_count < 2:
+                p_values.loc[col1, col2] = np.nan
             else:
                 try:
-                    _, pval = stats.pearsonr(x[valid], y[valid])
-                    pvals.loc[col1, col2] = pval
-                except Exception:
-                    pvals.loc[col1, col2] = np.nan
+                    _, p_value = stats.pearsonr(x[valid_mask], y[valid_mask])
+                    p_values.loc[col1, col2] = p_value
+                except Exception as e:
+                    logger.warning(
+                        f"Error calculating correlation for {col1} and {col2}: {e}"
+                    )
+                    p_values.loc[col1, col2] = np.nan
 
     # Create a combined dataframe with formatted correlation and p-value values
-    combined = corr.copy()
-    for row in corr.index:
-        for col in corr.columns:
-            r = corr.loc[row, col]
-            p = pvals.loc[row, col]
-            if pd.isna(r) or pd.isna(p):
-                combined.loc[row, col] = ""
+    combined_text = corr_matrix.copy()
+    for row in corr_matrix.index:
+        for col in corr_matrix.columns:
+            r_value = corr_matrix.loc[row, col]
+            p_value = p_values.loc[row, col]
+            if pd.isna(r_value) or pd.isna(p_value):
+                combined_text.loc[row, col] = ""
             else:
-                combined.loc[row, col] = f"{r:.2f} ({p:.2f})"
-    st.dataframe(combined)
+                combined_text.loc[row, col] = f"{r_value:.2f} ({p_value:.2f})"
+    st.dataframe(combined_text)
 
     # Create annotations with both correlation and p-value
-    annot = corr.copy().astype(str)
-    for row in corr.index:
-        for col in corr.columns:
-            r = corr.loc[row, col]
-            p = pvals.loc[row, col]
-            if pd.isna(r) or pd.isna(p):
-                annot.loc[row, col] = ""
+    annotations = corr_matrix.copy().astype(str)
+    for row in corr_matrix.index:
+        for col in corr_matrix.columns:
+            r_value = corr_matrix.loc[row, col]
+            p_value = p_values.loc[row, col]
+            if pd.isna(r_value) or pd.isna(p_value):
+                annotations.loc[row, col] = ""
             else:
-                annot.loc[row, col] = f"{r:.2f}\np={p:.2f}"
+                annotations.loc[row, col] = f"{r_value:.2f}\np={p_value:.2f}"
 
     # Plot heatmap with annotations using Plotly
     fig = go.Figure(
         data=go.Heatmap(
-            z=corr.values,
-            x=corr.columns,
-            y=corr.index,
-            text=annot.values,
+            z=corr_matrix.values,
+            x=corr_matrix.columns,
+            y=corr_matrix.index,
+            text=annotations.values,
             texttemplate="%{text}",
             colorscale="RdBu",
             reversescale=True,
