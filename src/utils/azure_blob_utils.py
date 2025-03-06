@@ -19,6 +19,28 @@ from config import (
 )
 
 
+def get_account_info_from_connection_string(
+    blob_connection_string: str
+) -> tuple[str, str]:
+    """
+    Extract account information from a blob storage connection string safely.
+
+    Args:
+        blob_connection_string (str): The Azure Storage connection string
+
+    Returns:
+        tuple: (account_name, account_url)
+    """
+    # Create a temporary BlobServiceClient to safely parse the connection string
+    temp_client = BlobServiceClient.from_connection_string(blob_connection_string)
+
+    # Access the account_name and url properties directly from the client
+    account_name = temp_client.account_name
+    account_url = temp_client.url
+
+    return account_name, account_url
+
+
 @st.cache_resource(show_spinner=False)
 def get_container_client(
     sync: bool = False,
@@ -40,8 +62,7 @@ def get_container_client(
         return None
 
     service_client = BlobServiceClient if sync else AsyncBlobServiceClient
-    account_name = blob_connection_string.split(";")[1].split("AccountName=")[1]
-    account_url = f"https://{account_name}.blob.core.windows.net"
+    _, account_url = get_account_info_from_connection_string(blob_connection_string)
     credential = DefaultAzureCredential()
     try:
         blob_service_client = service_client(account_url, credential)

@@ -1,4 +1,4 @@
-import streamlit as st  # added for Streamlit
+import streamlit as st
 from typing import Dict, Tuple, List, Optional, Any
 from scipy import stats
 import numpy as np
@@ -27,10 +27,10 @@ def calculate_mean_and_conf_interval(
     if len(scores) < 2:
         return scores.mean(), np.nan
     mean_score = scores.mean()
-    sem = stats.sem(scores)
+    standard_error_of_mean = stats.sem(scores)
     # In case sem is 0 or nan, the interval will be degenerate.
     conf_interval = stats.t.interval(
-        confidence, df=len(scores) - 1, loc=mean_score, scale=sem
+        confidence, df=len(scores) - 1, loc=mean_score, scale=standard_error_of_mean
     )
     conf_interval_pm = conf_interval[1] - mean_score
     return mean_score, conf_interval_pm
@@ -189,7 +189,7 @@ def plot_correlation_heatmap(run_data: pd.DataFrame, metrics: List[str]) -> None
     """
     score_columns = [col for col in run_data.columns if "score" in col.lower()]
     # Merge and sort to keep a consistent order
-    columns_to_plot = sorted(list(set(score_columns + metrics)))
+    columns_to_plot = sorted(set(score_columns + metrics))
     data_subset = run_data[columns_to_plot].copy()
 
     # Compute correlation matrix

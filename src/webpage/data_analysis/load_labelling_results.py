@@ -7,6 +7,7 @@ import streamlit as st
 from config import LABELLING_RESULTS_FOLDER
 from utils.azure_blob_utils import download_file_from_blob, list_files_in_blob
 from utils.logger import logger
+from webpage.data_analysis.analysis_consts import LOW_VARIANCE_THRESHOLD
 from webpage.labelling_consts import (
     _PROCESS_RESULTS_DATA,
     _PROCESS_RESULTS_RAW_DATA,
@@ -18,9 +19,6 @@ from webpage.labelling_consts import (
 )
 from webpage.load_data import read_data_from_file
 from webpage.reload_saved_results import decode_file_name
-
-# Constants
-LOW_VARIANCE_THRESHOLD = 0.1
 
 
 def calculate_score(df: pd.DataFrame, quality_to_score: Dict[Any, Any]) -> pd.DataFrame:
@@ -136,7 +134,7 @@ def process_file_data(file_name: str) -> Optional[pd.DataFrame]:
         return None
 
 
-# @st.cache_data(ttl="5min")
+@st.cache_data(ttl="5min")
 def read_all_results(
     check_for_low_variance: bool = True
 ) -> Optional[Dict[str, Dict[str, Any]]]:

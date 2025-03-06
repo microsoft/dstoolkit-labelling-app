@@ -1,6 +1,7 @@
+# https://pypi.org/project/streamlit-authenticator/#3-creating-a-config-file
 credentials:
   usernames:
 cookie:
   expiry_days: 30
-  key: random_signature_key # Must be string
-  name: random_cookie_name
+  key: your_custom_signature_key  # Replace with a secure random string
+  name: your_app_cookie_name      # Replace with a descriptive cookie name

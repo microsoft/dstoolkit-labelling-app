@@ -36,7 +36,7 @@ QUALITY_LABELS = {
 
 # Internal constants
 USER_NAME = "user_name"
-DS_ROLE_KEY = "data_scientist"  # Adding this key to the config file will give the user data scientist role
+DS_ROLE_KEY = "data_scientist"  # Adding this key to the config file will give the user data scientist role, which gives access to the data analysis page.
 FILE_NAME_SEPARATOR = "___"  # Triple underscores to reduce likelihood of conflicts
 
 FILE_NAME = "file_name"
