@@ -36,6 +36,8 @@ QUALITY_LABELS = {
 
 # Internal constants
 USER_NAME = "user_name"
+DS_ROLE_KEY = "data_scientist"  # Adding this key to the config file will give the user data scientist role, which gives access to the data analysis page.
+FILE_NAME_SEPARATOR = "___"  # Triple underscores to reduce likelihood of conflicts
 
 FILE_NAME = "file_name"
 FILENAME_HASH = "filename_hash"
@@ -68,3 +70,11 @@ ERROR_DATA = "_error_data"
 
 # App title
 APP_TITLE = "Labelling App"
+
+
+# Internal config consts
+_USER_ROLE_KEY = "user_is_ds"
+_PROCESS_RESULTS_DATA = "data"
+_PROCESS_RESULTS_RAW_DATA = "raw_data"
+_PROCESS_RESULTS_SCORE = "score"
+_PROCESS_RESULTS_RUN_ID = "run_id"

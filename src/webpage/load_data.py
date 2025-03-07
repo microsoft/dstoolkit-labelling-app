@@ -1,111 +1,126 @@
+import json
+import random
+from io import BytesIO
 from typing import Optional
-from config import REQUIRED_COLS
-from utils.logger import logger
-from webpage.labelling_consts import FILE_HASH, FILE_NAME, FILENAME_HASH
-
 
 import pandas as pd
 import streamlit as st
 
-
-import json
-import random
-from io import BytesIO
-
-from webpage.manage_user_session import upd_state_on_file_reload
+from config import REQUIRED_COLS
+from utils.logger import logger
 from utils.azure_blob_utils import download_file_from_blob, list_files_in_blob
+from webpage.labelling_consts import FILE_HASH, FILE_NAME, FILENAME_HASH
+from webpage.manage_user_session import upd_state_on_file_reload
 
 
-def read_data_from_file(file: BytesIO) -> pd.DataFrame | None:
+def read_data_from_file(file: BytesIO) -> Optional[pd.DataFrame]:
     """
     Reads data from a file and returns it as a pandas DataFrame.
-    Parameters:
-        file (BytesIO): The file object containing the data.
-    Returns:
-        pd.DataFrame | None: The loaded data as a pandas DataFrame, or None if there was an error.
-    Raises:
-        Exception: If there was an error loading the data from the file.
-    """
 
+    Args:
+        file (BytesIO): The file object containing the data.
+
+    Returns:
+        Optional[pd.DataFrame]: The loaded data as a DataFrame, or None if there was an error.
+    """
     try:
         data = json.load(file)
+
+        # Handle different JSON formats
         if "data" not in data:
             df = pd.DataFrame.from_dict(data, orient="columns")
-            return df
-        df = pd.DataFrame.from_dict(data["data"])
-        df.columns = data["columns"]
-        df.index = data["index"]
+        else:
+            df = pd.DataFrame.from_dict(data["data"])
+            df.columns = data["columns"]
+            df.index = data["index"]
+
         return df
+
+    except json.JSONDecodeError as e:
+        logger.exception(f"Invalid JSON format: {e}")
+        st.error("Invalid JSON format in the file.")
+        return None
     except Exception as e:
         logger.exception(f"Error loading data from file: {e}")
         st.error("Error loading data from file.")
         return None
 
 
-def get_labelling_data() -> pd.DataFrame | None:
+def get_labelling_data() -> Optional[pd.DataFrame]:
     """
-    Retrieves labelling data from a selected file and returns it as a pandas DataFrame.
+    Retrieves labelling data from a user-selected file in blob storage.
 
     Returns:
-        pd.DataFrame: The labelling data as a pandas DataFrame, or None if there was an error.
+        Optional[pd.DataFrame]: The labelling data as a DataFrame, or None if there was an error.
     """
     files = list_files_in_blob(extension=".json")
     if files is None:
+        st.error("Could not retrieve files from storage.")
         return None
 
     file_name = st.sidebar.selectbox("Select the results file to analyse", files)
     if file_name is None:
+        st.info("Please select a file to continue.")
         return None
 
-    file: Optional[BytesIO] = download_file_from_blob(file_name)
+    file = download_file_from_blob(file_name)
     if file is None:
+        st.error(f"Could not download file: {file_name}")
         return None
 
     df = read_data_from_file(file)
     if df is None:
         return None
 
-    # Check if required columns are present
-    for col in REQUIRED_COLS:
-        if col not in df.columns:
-            st.error(f"Column {col} is missing from the file.")
-            return None
+    # Validate required columns
+    missing_cols = [col for col in REQUIRED_COLS if col not in df.columns]
+    if missing_cols:
+        st.error(f"Missing required columns: {', '.join(missing_cols)}")
+        return None
 
+    # Store file name and update file hash if needed
     st.session_state[FILE_NAME] = ".".join(file_name.split(".")[:-1])
+    update_file_hash(file_name)
 
+    return df
+
+
+def update_file_hash(file_name: str) -> None:
+    """
+    Updates the file hash in session state when the file changes.
+
+    Args:
+        file_name (str): Name of the selected file.
+    """
     # Check if the file has changed
     filename_hash = hash(file_name)
     if st.session_state.get(FILENAME_HASH) != filename_hash:
         st.session_state[FILENAME_HASH] = filename_hash
         # Generate a new hash for the file, to be used as a unique identifier
         # If user loaded file a, then file b, then file a again, the hash will be different
-        # Requied for caching
+        # Required for caching
         st.session_state[FILE_HASH] = random.randint(0, int(1e9))  # nosec
-    return df
 
 
 @st.cache_data()
 def process_data(
     df: pd.DataFrame,
-    n: int | None = None,
+    n: Optional[int] = None,
     random_seed: Optional[int] = None,
     file_hash: Optional[int] = None,
 ) -> pd.DataFrame:
     """
-    Randomly selects 'n' rows from the given DataFrame and stores them in the session state.
+    Processes the dataset, optionally selecting a random sample.
 
-    Parameters:
-        df (pd.DataFrame): The DataFrame from which rows will be selected.
-        n (int): The number of rows to be selected. Default is 5.
-        random_seed (Optional[int]): The random seed for caching. Default is None.
-        file_hash (Optional[int]): The hash of the file. Default is None. Requried for streamlit caching.
+    Args:
+        df (pd.DataFrame): The DataFrame to process.
+        n (Optional[int]): Number of rows to sample. If None, returns the entire DataFrame.
+        random_seed (Optional[int]): Random seed for reproducibility.
+        file_hash (Optional[int]): Hash of the file for caching.
 
     Returns:
-        pd.DataFrame: The randomly selected rows from the DataFrame.
+        pd.DataFrame: The processed DataFrame.
     """
-    if n is not None:
-        res = df.sample(n=n, random_state=random_seed)
-    else:
-        res = df
-    upd_state_on_file_reload(res)
-    return res
+    result_df = df.sample(n=n, random_state=random_seed) if n is not None else df
+    upd_state_on_file_reload(result_df)
+    return result_df
