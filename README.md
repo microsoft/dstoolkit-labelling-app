@@ -6,6 +6,7 @@ This repository contains a web application developed with Streamlit for quick co
 - Options to save progress and automatically reload results between different sessions
 - Ability to record high-level feedback per sample, as well as detailed analysis of specific parts
 - Ease of customization for specific use cases
+- Detailed analysis and interactive visualizations for labelling experiments via the Data Analysis View.
 
 ![Web Application](./src/assets/app_demo.png)
 
@@ -17,7 +18,7 @@ This repository contains a web application developed with Streamlit for quick co
 2. Install project dependencies:
 
     ```bash
-    pip install -r ./webpage/requirements.txt
+    pip install -r ./src/requirements.txt
     ```
 
 3. Navigate to the `src/` folder and set up the `$PYTHONPATH`:
@@ -41,7 +42,7 @@ pre-commit install
 
 ### Azure Blob Connection
 
-The web app relies on Azure Blob Storage to manage the labelling data and user credentials. Azure Blob Storage connection settings are configured via environment variables. All required key/values are described in the [`.env.template`](./.env.template) file.
+The web app relies on Azure Blob Storage to manage the labelling data and user credentials. Azure Blob Storage connection settings are configured via environment variables. All required key/values are described in the [`.env.template`](./src/.env.template) file.
 
 ### Upload Assets to the Blob Container
 
@@ -53,6 +54,59 @@ The web app relies on Azure Blob Storage to manage the labelling data and user c
 - [config.py](/src/config.py) sets the required column names for reading input data.
 - [labelling_consts.py](/src/webpage/labelling_consts.py) sets the output column names and error categories.
 - [labelling_instructions.md](/src/assets/labelling_instructions.md) provides a description of how SMEs should approach labelling.
+
+### Extending with Custom Forms
+
+The application supports extending the labelling interface with custom forms to collect specialized feedback:
+
+- Create custom feedback forms for domain-specific evaluations
+- Easily integrate new data collection components using the CustomFormHandler base class
+- Add specialized metrics and insights to the Data Analysis View
+
+For detailed implementation instructions, see the [Custom Forms Guide](/src/doc/custom_forms_guide.md).
+
+## Data Analysis View
+
+The Data Analysis View is a specialized dashboard for data scientists and project managers to monitor labelling progress and analyze results from the SME feedback collection process.
+
+![Data Analysis View](./src/assets/ds_view.png)
+
+### Features
+
+- **Progress Monitoring**: Track real-time labelling progress across users and experiments
+- **Results Analytics**: Access comprehensive statistics on labelled data, including summary metrics and comparisons between different labelling runs
+- **Visual Insights**: Interactive visualizations displaying score distributions and correlation analyses between ML metrics and SME evaluations
+- **Quality Assessment**: Identify problematic examples through the "Top-10 Worst Examples" view, helping to pinpoint areas for model improvement
+
+### Default Visualizations
+
+The view provides several pre-configured visualization panels:
+
+- Detailed labelling progress per user and per file
+- Comprehensive summary statistics comparing metrics between different runs
+- Distribution charts showing how SME scores are distributed across the dataset
+- Correlation heatmaps between machine learning metrics and human evaluations
+- Focused analysis of the lowest-scored examples to understand common failure patterns
+
+### How to Enable
+
+The Data Analysis View is role-restricted and only available to users with data scientist privileges:
+
+1. In the `config.yaml` file, ensure users who need access have the appropriate role setting:
+
+   ```yaml
+   credentials:
+     usernames:
+       analyst_username:
+         name: Analyst Name
+         password: password_hash  # This should be a hashed password
+         email: analyst@example.com
+         data_scientist: true  # This enables Data Analysis View access
+   ```
+
+2. When a user with the appropriate role logs in, the "Data Analysis View" option will automatically appear in the navigation sidebar.
+
+3. To customize available analytics, modify the `/src/webpage/data_analysis/ds_view.py` file.
 
 ## Security
 
@@ -72,7 +126,7 @@ The pipeline updates the image in the Azure Container Registry (ACR). When Azure
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
 Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
-the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
+the rights to use your contribution. For details, visit <https://cla.opensource.microsoft.com>.
 
 When you submit a pull request, a CLA bot will automatically determine whether you need to provide
 a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
@@ -84,8 +138,8 @@ contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additio
 
 ## Trademarks
 
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft 
-trademarks or logos is subject to and must follow 
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
+trademarks or logos is subject to and must follow
 [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
 Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
 Any use of third-party trademarks or logos are subject to those third-party's policies.
